@@ -39,6 +39,11 @@
 
     <dependencies>
         <dependency>
+            <groupId>org.apache.beam</groupId>
+            <artifactId>beam-sdks-java-nexmark</artifactId>
+            <version>2.3.0</version>
+        </dependency>
+        <dependency>
             <groupId>org.apache.kafka</groupId>
             <artifactId>kafka-clients</artifactId>
             <version>${kafka.version}</version>
@@ -140,6 +145,17 @@
     </dependencies>
 
     <build>
+
+        <resources>
+            <resource>
+                <directory>ds2/flink-examples/src/main/resources</directory>
+                <includes>
+                    <include>**/*.txt</include>
+                </includes>
+            </resource>
+        </resources>
+
+        <sourceDirectory>ds2/flink-examples/src/main/java</sourceDirectory>
         <plugins>
             <!-- Java Compiler -->
             <plugin>
@@ -188,7 +204,7 @@
                                 <!-- Change this to your main class -->
                                 <transformer
                                         implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                                    <mainClass>io.streamingledger.producer.OrderProducer</mainClass>
+                                    <mainClass>ch.ethz.systems.strymon.ds2.flink.wordcount.TwoInputsWordCount</mainClass>
                                 </transformer>
                             </transformers>
                         </configuration>
