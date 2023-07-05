@@ -56,10 +56,14 @@ services:
       - ./jars/:/opt/flink/jars
       - ./logs/flink/jm:/opt/flink/temp
       - ./target/spf-0.1.0.jar:/opt/flink/target_jar
+      - ./savepoints:/opt/flink/savepoints
     environment:
       - |
         FLINK_PROPERTIES=
         jobmanager.rpc.address: jobmanager
+        state.backend: filesystem
+        state.savepoints.dir: file:///opt/flink/savepoints
+        state.checkpoints.dir: file:///opt/flink/savepoints
         metrics.reporters: prom
         metrics.reporter.prom.factory.class: org.apache.flink.metrics.prometheus.PrometheusReporterFactory
         metrics.reporter.prom.port: 9249
@@ -92,9 +96,11 @@ services:
       - "9250:9249"
     volumes:
       - ./logs/flink/tm1:/opt/flink/temp
+      - ./savepoints:/opt/flink/savepoints
     environment:
       - |
         FLINK_PROPERTIES=
+        state.savepoints.dir: file:///opt/flink/savepoints
         jobmanager.rpc.address: jobmanager
         taskmanager.numberOfTaskSlots: 5
         metrics.reporters: prom
@@ -129,9 +135,11 @@ services:
       - "9251:9249"
     volumes:
       - ./logs/flink/tm2:/opt/flink/temp
+      - ./savepoints:/opt/flink/savepoints
     environment:
       - |
         FLINK_PROPERTIES=
+        state.savepoints.dir: file:///opt/flink/savepoints
         jobmanager.rpc.address: jobmanager
         taskmanager.numberOfTaskSlots: 5
         metrics.reporters: prom
