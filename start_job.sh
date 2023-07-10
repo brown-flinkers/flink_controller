@@ -1,0 +1,1 @@
+bin/flink run -c ch.ethz.systems.strymon.ds2.flink.wordcount.TwoInputsWordCount target_jar

@@ -1,0 +1,3 @@
+[submodule "ds2"]
+	path = ds2
+	url = git@github.com:strymon-system/ds2.git
