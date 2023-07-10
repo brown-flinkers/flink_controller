@@ -57,6 +57,7 @@ services:
       - ./logs/flink/jm:/opt/flink/temp
       - ./target/spf-0.1.0.jar:/opt/flink/target_jar
       - ./savepoints:/opt/flink/savepoints
+      - ./start_job.sh:/opt/flink/start_job.sh
     environment:
       - |
         FLINK_PROPERTIES=
