@@ -43,18 +43,18 @@ public class TwoInputsWordCount {
 						params.getInt("source-rate", 80000),
 						params.getInt("sentence-size", 100)))
 				.name("Source Two")
-				.setParallelism(params.getInt("p1", 1));
+				.setParallelism(params.getInt("p2", 1));
 
 		// split up the lines in pairs (2-tuples) containing:
 		// (word,1)
 		DataStream<Tuple2<String, Integer>> counts = textOne.connect(textTwo)
 				.flatMap(new Tokenizer())
 					.name("FlatMap tokenizer")
-					.setParallelism(params.getInt("p2", 1))
+					.setParallelism(params.getInt("p3", 5))
 				.keyBy(0)
 				.sum(1)
 					.name("Count op")
-					.setParallelism(params.getInt("p3", 1));
+					.setParallelism(params.getInt("p4", 1));
 		// write to dummy sink
 		counts.addSink(new SinkFunction<Tuple2<String, Integer>>() {
 			private static final long serialVersionUID = 1L;
@@ -64,7 +64,7 @@ public class TwoInputsWordCount {
 			}
 		})
 				.name("Dummy Sink")
-				.setParallelism(params.getInt("p3", 1));
+				.setParallelism(params.getInt("p5", 1));
 
 		// execute program
 		JobExecutionResult res = env.execute("Two Input Streaming WordCount");
