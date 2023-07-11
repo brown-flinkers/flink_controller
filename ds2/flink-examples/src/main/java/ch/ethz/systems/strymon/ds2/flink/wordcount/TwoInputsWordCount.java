@@ -17,12 +17,12 @@ public class TwoInputsWordCount {
 		// Checking input parameters
 		final ParameterTool params = ParameterTool.fromArgs(args);
 
-		if (!params.has("p1") || !params.has("p2") || !params.has("p3")) {
-			System.out.println("Use --p1 --p2 --p3 --sentence-size -- source-rate"
-					+ "to specify the parallelism of the source, tokenizer, and count operators respectively,"
-					+ "the sentence size, and the source output rate.");
-			System.exit(-1);
-		}
+//		if (!params.has("p1") || !params.has("p2") || !params.has("p3")) {
+//			System.out.println("Use --p1 --p2 --p3 --sentence-size -- source-rate"
+//					+ "to specify the parallelism of the source, tokenizer, and count operators respectively,"
+//					+ "the sentence size, and the source output rate.");
+//			System.exit(-1);
+//		}
 
 		// set up the execution environment
 		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
