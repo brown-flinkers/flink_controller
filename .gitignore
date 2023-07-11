@@ -40,3 +40,5 @@ build/
 
 ### Mac OS ###
 .DS_Store
+savepoints/
+ds2_query_data/
