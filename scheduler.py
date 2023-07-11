@@ -8,6 +8,7 @@ import os
 import traceback
 from collections import defaultdict
 import threading
+import pprint
 
 avg_over_time = "30s"
 prometheus_address = "localhost:9090"
@@ -18,6 +19,13 @@ overprovisioning_factor = 1
 ops = ['Source:_Source_One', 'Source:_Source_Two', 'FlatMap_tokenizer', 'Count_op', 'Sink:_Dummy_Sink']
 
 
+def need_reschedule(old_parallelism, new_parallelism):
+    for op in new_parallelism:
+        if op in old_parallelism and old_parallelism[op] != new_parallelism[op]:
+            return True
+    return False
+
+#find the current running job
 def find_running_job():
     job_id = ''
     job_id_json = requests.get(f"{flink_rest_api}/jobs/")
@@ -100,9 +108,9 @@ class scheduler:
 
 
         # parse the result of DS2
-        ds2_model_result = subprocess.run(command, capture_output=True)
-        output_text = ds2_model_result.stdout.decode("utf-8")
-        print(output_text)
+        ds2_model_result = subprocess.run(command, capture_output=True, text=True)
+        # print(ds2_model_result.stderr)
+        output_text = ds2_model_result.stdout
         output_text_values = output_text.split("\n")[-2]
         output_text_values = output_text_values[1:-1]
 
@@ -133,6 +141,17 @@ class scheduler:
     def collect_and_write_data_to_file(self):
         print("---Collecting and Writing Metrics---")
 
+        # a way to make sure that prometheus service is up!
+        prometheus_is_up = False
+        while not prometheus_is_up:
+            input_rate_query = requests.get(
+                "http://" + prometheus_address + "/api/v1/query?query=rate(flink_taskmanager_job_task_numRecordsInPerSecond[" + avg_over_time + "])")
+            input_rates_per_operator = extract_per_operator_metrics(input_rate_query, include_subtask=True)
+            if len(input_rates_per_operator) == 0:
+                time.sleep(5)
+            else:
+                prometheus_is_up = True
+
         input_rate_query = requests.get(
             "http://" + prometheus_address + "/api/v1/query?query=rate(flink_taskmanager_job_task_numRecordsInPerSecond[" + avg_over_time + "])")
         output_rate_query = requests.get(
@@ -148,10 +167,11 @@ class scheduler:
         lag = requests.get(
             "http://" + prometheus_address + "/api/v1/query?query=sum(flink_taskmanager_job_task_operator_KafkaSourceReader_KafkaConsumer_records_lag_max * flink_taskmanager_job_task_operator_KafkaSourceReader_KafkaConsumer_assigned_partitions) by (task_name)")
 
-
         input_rates_per_operator = extract_per_operator_metrics(input_rate_query, include_subtask=True)
         output_rates_per_operator = extract_per_operator_metrics(output_rate_query, include_subtask=True)
         busy_time_per_operator = extract_per_operator_metrics(busy_time_query, include_subtask=True)
+
+        print(input_rates_per_operator)
 
         busy_time_per_operator['Source:_Source_One 0'] = 1000
         busy_time_per_operator['Source:_Source_Two 0'] = 1000
@@ -212,6 +232,7 @@ class scheduler:
         print("---Collecting and Writing Metrics---DONE")
         print("OLD parallelism: ")
         print(processors_per_operator)
+        return processors_per_operator
 
     def restart(self, path_to_savepoint, new_parallelism):
         def restart_job():
@@ -296,12 +317,15 @@ class scheduler:
 
     def run(self):
         while True:
-            job_id, path_to_savepoint = self.take_savepoint()
-            self.collect_and_write_data_to_file()
+            old_parallelism = self.collect_and_write_data_to_file()
             new_parallelism = self.call_ds2()
-            self.stop(job_id)
-            self.restart(path_to_savepoint, new_parallelism)
-            time.sleep(20)
+            if need_reschedule(old_parallelism, new_parallelism):
+                job_id, path_to_savepoint = self.take_savepoint()
+                self.stop(job_id)
+                self.restart(path_to_savepoint, new_parallelism)
+            print("---Sleeping---")
+            time.sleep(120)
+            print("---Sleeping---DONE")
 
 s = scheduler()
 s.run()
