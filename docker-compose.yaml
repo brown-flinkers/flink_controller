@@ -1,50 +1,28 @@
 version: "3.7"
 services:
-  redpanda:
-    command:
-      - redpanda
-      - start
-      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
-      - --advertise-kafka-addr internal://redpanda:9092,external://localhost:19092
-      - --pandaproxy-addr internal://0.0.0.0:8082,external://0.0.0.0:18082
-      - --advertise-pandaproxy-addr internal://redpanda:8082,external://localhost:18082
-      - --schema-registry-addr internal://0.0.0.0:8081,external://0.0.0.0:18081
-      - --rpc-addr redpanda:33145
-      - --advertise-rpc-addr redpanda:33145
-      - --smp 1
-      - --memory 1G
-      - --mode dev-container
-      - --default-log-level=debug
-    image: docker.redpanda.com/redpandadata/redpanda:v23.1.7
-    container_name: redpanda
-    volumes:
-      - ./logs/redpanda:/var/lib/redpanda/data
+  kafka: # Replace the redpanda service with kafka service
+    image: confluentinc/cp-kafka:7.2.1  # Update to the appropriate Kafka version (6.2.0 in this case)
+    platform: linux/amd64  # Specify the platform architecture you want to use
+    container_name: kafka1
     ports:
-      - "18081:18081"
-      - "18082:18082"
-      - "19092:19092"
-      - "19644:9644"
-  console:
-    container_name: redpanda-console
-    image: docker.redpanda.com/vectorized/console:v2.2.3
-    entrypoint: /bin/sh
-    command: -c 'echo "$$CONSOLE_CONFIG_FILE" > /tmp/config.yml; /app/console'
+      - "9092:9092"  # Kafka Broker Port
+      - "19092:19092"  # Kafka External Listener Port
+      - "9091:9091"  # Kafka Internal Listener Port
+      - "9093:9093"  # Kafka Controller Listener Port
     environment:
-      CONFIG_FILEPATH: /tmp/config.yml
-      CONSOLE_CONFIG_FILE: |
-        kafka:
-          brokers: ["redpanda:9092"]
-          schemaRegistry:
-            enabled: true
-            urls: ["http://redpanda:8081"]
-        redpanda:
-          adminApi:
-            enabled: true
-            urls: ["http://redpanda:9644"]
-    ports:
-      - "8080:8080"
-    depends_on:
-      - redpanda
+      KAFKA_NODE_ID: 1
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_LISTENERS: PLAINTEXT://kafka1:9092,CONTROLLER://kafka1:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka1:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka1:9093'
+      KAFKA_PROCESS_ROLES: 'broker,controller'
+    volumes:
+      - ./logs/kafka:/var/lib/kafka/data  # Adjust the path to the Kafka data directory
+      - ./run_workaround.sh:/tmp/run_workaround.sh
+    command: "bash -c '/tmp/run_workaround.sh && /etc/confluent/docker/run'"
+
+
   jobmanager:
     build: .
     container_name: jobmanager
