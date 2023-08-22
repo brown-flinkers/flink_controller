@@ -16,6 +16,12 @@ use dataflow::petgraph::algo::toposort;
 use dataflow::topology::Topology;
 use dataflow::{OperatorId,OperatorInstanceId,OperatorInstances,Epoch,Rate};
 
+// Define a custom comparison function for your use case
+fn compare_rates(rate1: f64, rate2: f64) -> std::cmp::Ordering {
+    rate1.partial_cmp(&rate2).unwrap_or(std::cmp::Ordering::Equal)
+}
+
+
 
 /// Converts a dataflow configuration `conf` to a vector of pairs `(OperatorId,OperatorInstances)`
 pub fn as_vec(conf: &String) -> Vec<(OperatorId,OperatorInstances)>
@@ -98,7 +104,6 @@ pub fn evaluate_scaling_policy(topo: &mut Topology, threshold: f64, factor: f64,
     // Used in configuration adjustments
     let sources = topo.get_sources_idx();
     let config_before = topo.dictionary.clone();
-    let mut config_after = HashMap::new();
     let mut source_rates_ratios = Vec::new();
     // Useful in Timely experiments
     let mut workers_per_epoch = HashMap::new();
@@ -164,6 +169,17 @@ pub fn evaluate_scaling_policy(topo: &mut Topology, threshold: f64, factor: f64,
                 if verbose { println!("Aggregated target rate for epoch {} is {}",epoch,input_rate); }
                 // Estimate optimal level of parallelism assuming there is no computation skew across current operator instances
                 let optimal_instances_per_epoch = input_rate/(true_processing_rate[epoch as usize].1 / op_instances as f64);
+
+                let rate1 = input_rate;
+                let rate2 = true_processing_rate[epoch as usize].1;
+
+                println!("input rate: {}, true processing rate: {}", rate1, rate2);
+
+                let output_rate_new = match compare_rates(rate1, rate2) {
+                    std::cmp::Ordering::Less => rate1,
+                    _ => rate2,
+                };
+                //let output_rate_new = min(input_rate, true_processing_rate[epoch as usize].1);
                 // Update the total number of instances in the optimal dataflow configuration per epoch -- Useful in Timely experiments
                 if !optimal_instances_per_epoch.is_nan() && !optimal_instances_per_epoch.is_infinite() // Ignore partially logged epochs
                 {
@@ -172,33 +188,40 @@ pub fn evaluate_scaling_policy(topo: &mut Topology, threshold: f64, factor: f64,
                 }
                 // Store optimal configuration for the current operator in the topology
                 graph[idx].optimal_parallelism_per_epoch.insert(epoch,(optimal_instances_per_epoch * (1.0 + factor)).ceil() as u32);
+                graph[idx].output_rates_per_epoch.insert(epoch, (rate1, rate2));
                 // Estimate the aggregated true output rate of the current operator when configured with the optimal number of instances
-                estimated_true_output_rate[epoch as usize].1 *= optimal_instances_per_epoch / (op_instances as f64);
+                // estimated_true_output_rate[epoch as usize].1 *= optimal_instances_per_epoch / (op_instances as f64);
             }
         }
         let adjacent_operators = graph.neighbors(idx).collect::<Vec<_>>();	// The downstream operators of the current operator
         for &operator in adjacent_operators.iter()
         { // Step 3: Update the estimated true output rate, which amounts to the estimated input rate of the downstream operators
             let entry = true_output_rate.entry(operator).or_insert_with(|| vec![(Epoch::default(),Rate::default());estimated_true_output_rate.len()]);
-            for &(epoch,rate) in estimated_true_output_rate.iter()
+            for (&epoch,&(rate1, rate2)) in graph[idx].output_rates_per_epoch.iter()
             {
+
+                //let rate1 = rate.1;
+                //let rate2 = rate.2;
+
+                let output_rate_new = match compare_rates(rate1, rate2) {
+                    std::cmp::Ordering::Less => rate1,
+                    _ => rate2,
+                };
+
                 if epoch >= entry.len() as u64 {break;}	// Ignore partially logged epochs
                 entry[epoch as usize].0 =  epoch;
-                entry[epoch as usize].1 += rate;
+                entry[epoch as usize].1 += ;
             }
         }
         {
             // Step 4: Add the optimal configuration of the current operator per epoch to the result
             let op_info = &graph[idx];
-            for (&epoch, &level_of_parallelism) in op_info.optimal_parallelism_per_epoch.iter()
+
+            for (&epoch, &output_rate) in op_info.output_rates_per_epoch.iter()
             {
-                if !sources.contains(&idx)
-                {
-                    let e = config_after.entry(op_info.id.clone()).or_insert_with(|| Vec::new());
-                    e.push(level_of_parallelism);
-                }
-                if verbose { println!("Optimal parallelism for epoch {} is {}",epoch,level_of_parallelism); }
-                optimal_config.push_str(&format!("{},{},",op_info.id,level_of_parallelism))
+                let (rate1, rate2) = output_rate;
+                if verbose { println!("Optimal parallelism for epoch {} is {} and {}", epoch, rate1, rate2); }
+                optimal_config.push_str(&format!("{},{},{},",op_info.id, rate1, rate2))
             }
         }
     }
@@ -214,49 +237,7 @@ pub fn evaluate_scaling_policy(topo: &mut Topology, threshold: f64, factor: f64,
             println!("Epoch {}: {} -> {} workers",e,workers,workers.ceil());
         }
     }
-    // Step 5: Check if there is a need for a final configuration adjustment
-    if verbose { println!("Source rate ratios: {:?}",source_rates_ratios); }
-    let epochs = source_rates_ratios[0].len();
-    let mut max_ratios = vec!(0f64;epochs);
-    // Compute the max 'true output rate / observed output rate' per epoch across all source operators
-    source_rates_ratios.drain(..)
-                    .for_each(|ratios|
-                        {
-                            let l1 = max_ratios.len();
-                            let l2 = ratios.len();
-                            if l1 < l2 { max_ratios.extend_from_slice(&ratios[l1..]); }
-                            for i in 0..l1
-                            {
-                                if i >= l2 { break; }	// Ignore partially logged epochs
-                                if max_ratios[i] < ratios[i] { max_ratios[i] = ratios[i]; }
-                            }
-                        });
-    if verbose {  println!("Max source rate ratios per epoch ({}): {:?}",max_ratios.len(), max_ratios); }
-    // Collect all epochs that did not include any scale-up decision with respect to the current configuration
-    let epochs = unchanged_or_scaled_down(config_before,config_after,sources.len());
-    if epochs.len() > 0
-    { // There are epochs that might need a final configuration adjustment
-        optimal_config.clear();
-        for idx in operators_to_visit.drain(..)
-        {
-            let op_info = &graph[idx];
-            for (&epoch, &level_of_parallelism) in op_info.optimal_parallelism_per_epoch.iter()
-            {	// The adjusted number of instances for the current operator per epoch
-                let epoch = epoch as usize;
-                let parallelism_adjustment = match  epoch < max_ratios.len() &&         // Ignore partially logged epochs
-                                                    max_ratios[epoch] > threshold &&    // Maximum target rate ratio is above the given threshold
-                                                    epochs.contains(&(epoch as Epoch))  // Epoch did not include any scale-up decision
-                                            {
-                                                true => (max_ratios[epoch]*level_of_parallelism as f64).ceil() as u32,	// Apply a final configuration adjustment assuming that the
-                                                                                                                        // operator's capacity increases linearly with its number of instances
-                                                false => level_of_parallelism	// Leave the estimated value as is
-                                            };
-                // Update result with the adjusted optimal configuration
-                optimal_config.push_str(&format!("{},{},",op_info.id,parallelism_adjustment));
-                if verbose { println!("[Adjustment]: Optimal parallelism of operator {} for epoch {} is {}",op_info.id,epoch,parallelism_adjustment); }
-            }
-        }
-    }
+
     let l = optimal_config.len();
     optimal_config.truncate(l-1);
     optimal_config
@@ -388,3 +369,8 @@ pub fn evaluate_scaling_policy_at_epoch(topo: &mut Topology, threshold: f64, fac
     optimal_config.truncate(l-1);
     optimal_config
 }
+
+
+// {'FlatMap_tokenizer': 97020, 'Count_op': 93921, 'Sink:_Dummy_Sink': 16}
+
+
