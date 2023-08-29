@@ -21,6 +21,7 @@ pub struct Operator
 	pub instances: OperatorInstances,                              			// Number of operator instances (current operator parallelism)
 	pub rates: HashMap<Epoch,Rates>,                               			// Processing and output rates of the operator per epoch
 	pub optimal_parallelism_per_epoch: HashMap<Epoch,OperatorInstances>,	// Estimated optimal number of instances per epoch
+	pub output_rates_per_epoch: HashMap<Epoch, f64>,
 }
 
 impl Operator
@@ -34,7 +35,8 @@ impl Operator
             name: op_name.to_string(),
             instances: op_instances,
             rates: HashMap::new(),
-            optimal_parallelism_per_epoch: HashMap::new()
+            optimal_parallelism_per_epoch: HashMap::new(),
+            output_rates_per_epoch: HashMap::new()
         }
     }
 }

@@ -111,32 +111,35 @@ class scheduler:
         ds2_model_result = subprocess.run(command, capture_output=True, text=True)
         # print(ds2_model_result.stderr)
         output_text = ds2_model_result.stdout
-        output_text_values = output_text.split("\n")[-2]
-        output_text_values = output_text_values[1:-1]
+        output_err = ds2_model_result.stderr
+        print(output_err)
+        print(output_text)
+        # output_text_values = output_text.split("\n")[-2]
+        # output_text_values = output_text_values[1:-1]
 
-        suggested_parallelism = {}
-
-        filtered = []
-        for val in output_text_values.split(','):
-            if "topic" not in val:
-                val = val.replace(" NodeIndex(0)\"", "")
-                val = val.replace(" NodeIndex(4)\"", "")
-                filtered.append(val)
-
-        for i in range(0, len(filtered), 2):
-            suggested_parallelism[filtered[i]] = math.ceil(float(filtered[i + 1].replace("\"", ""))*overprovisioning_factor)
-        if suggested_parallelism[filtered[i]] == 0:
-            raise Exception("parallelism is zero")
-        if suggested_parallelism[filtered[i]] > 16:
-            suggested_parallelism[filtered[i]] = 16
-        if suggested_parallelism[filtered[i]] <= 0:
-            suggested_parallelism[filtered[i]] = 1
-
-        print("---Calling DS2---DONE")
-        print("NEW parallelism: ")
-        print(suggested_parallelism)
-
-        return suggested_parallelism
+        # suggested_parallelism = {}
+        #
+        # filtered = []
+        # for val in output_text_values.split(','):
+        #     if "topic" not in val:
+        #         val = val.replace(" NodeIndex(0)\"", "")
+        #         val = val.replace(" NodeIndex(4)\"", "")
+        #         filtered.append(val)
+        #
+        # for i in range(0, len(filtered), 2):
+        #     suggested_parallelism[filtered[i]] = math.ceil(float(filtered[i + 1].replace("\"", ""))*overprovisioning_factor)
+        # if suggested_parallelism[filtered[i]] == 0:
+        #     raise Exception("parallelism is zero")
+        # if suggested_parallelism[filtered[i]] > 16:
+        #     suggested_parallelism[filtered[i]] = 16
+        # if suggested_parallelism[filtered[i]] <= 0:
+        #     suggested_parallelism[filtered[i]] = 1
+        #
+        # print("---Calling DS2---DONE")
+        # print("NEW parallelism: ")
+        # print(suggested_parallelism)
+        #
+        # return suggested_parallelism
 
     def collect_and_write_data_to_file(self):
         print("---Collecting and Writing Metrics---")
@@ -181,15 +184,20 @@ class scheduler:
         input_rate_kafka = extract_per_operator_metrics(input_rate_kafka)
         lag = extract_per_operator_metrics(lag)
 
+        print("AAAAAA")
+        print(input_rates_per_operator)
+        print(output_rates_per_operator)
+        print(busy_time_per_operator)
+
         true_processing_rate = {}
         for key in input_rates_per_operator:
             true_processing_rate[key] = input_rates_per_operator[key] / (busy_time_per_operator[key] / 1000)
-            # print("Operator: " + key + " InputRate: " + str(true_processing_rate[key]))
+            print("Operator: " + key + " InputRate: " + str(input_rates_per_operator[key]))
 
         true_output_rate = {}
         for key in output_rates_per_operator:
             true_output_rate[key] = output_rates_per_operator[key] / (busy_time_per_operator[key] / 1000)
-            # print("Operator: " + key + " OutputRate: " + str(true_output_rate[key]))
+            print("Operator: " + key + " OutputRate: " + str(output_rates_per_operator[key]))
 
         with open('./ds2_query_data/flink_rates_' + query + '.log', 'w+', newline='') as f:
             writer = csv.writer(f)
@@ -319,10 +327,10 @@ class scheduler:
         while True:
             old_parallelism = self.collect_and_write_data_to_file()
             new_parallelism = self.call_ds2()
-            if need_reschedule(old_parallelism, new_parallelism):
-                job_id, path_to_savepoint = self.take_savepoint()
-                self.stop(job_id)
-                self.restart(path_to_savepoint, new_parallelism)
+            # if need_reschedule(old_parallelism, new_parallelism):
+            #     job_id, path_to_savepoint = self.take_savepoint()
+            #     self.stop(job_id)
+            #     self.restart(path_to_savepoint, new_parallelism)
             print("---Sleeping---")
             time.sleep(120)
             print("---Sleeping---DONE")
