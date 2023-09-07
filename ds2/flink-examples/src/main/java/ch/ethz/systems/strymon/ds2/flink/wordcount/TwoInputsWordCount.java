@@ -2,19 +2,13 @@ package ch.ethz.systems.strymon.ds2.flink.wordcount;
 
 import ch.ethz.systems.strymon.ds2.flink.wordcount.sources.RateControlledSourceFunction;
 import org.apache.flink.api.common.JobExecutionResult;
-import org.apache.flink.api.common.serialization.SimpleStringSchema;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.utils.ParameterTool;
-import org.apache.flink.connector.kafka.source.KafkaSource;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.co.CoFlatMapFunction;
 import org.apache.flink.streaming.api.functions.sink.SinkFunction;
-import org.apache.flink.streaming.connectors.kafka.FlinkKafkaConsumer;
 import org.apache.flink.util.Collector;
-import org.apache.kafka.clients.consumer.ConsumerConfig;
-
-import java.util.Properties;
 
 public class TwoInputsWordCount {
 
@@ -37,27 +31,17 @@ public class TwoInputsWordCount {
 		// make parameters available in the web interface
 		env.getConfig().setGlobalJobParameters(params);
 
-		// Configure Kafka properties for textOne
-		Properties kafkaPropertiesOne = new Properties();
-		kafkaPropertiesOne.setProperty("bootstrap.servers", "localhost:9092");
-		kafkaPropertiesOne.setProperty("group.id", "word-count-group-textOne");
-		kafkaPropertiesOne.setProperty("auto.offset.reset", "earliest");
-
-		// Add Redpanda topic as a Kafka consumer source for textOne
-		DataStream<String> textOne = env.addSource(
-						new FlinkKafkaConsumer<>("my_topic", new SimpleStringSchema(), kafkaPropertiesOne))
+		final DataStream<String> textOne = env.addSource(
+				new RateControlledSourceFunction(
+						params.getInt("source-rate", 80000),
+						params.getInt("sentence-size", 100)))
 				.name("Source One")
-				.setParallelism(params.getInt("p1", 1));
+					.setParallelism(params.getInt("p1", 1));
 
-		// Configure Kafka properties for textTwo
-		Properties kafkaPropertiesTwo = new Properties();
-		kafkaPropertiesTwo.setProperty("bootstrap.servers", "localhost:9092");
-		kafkaPropertiesTwo.setProperty("group.id", "word-count-group-textTwo");
-		kafkaPropertiesTwo.setProperty("auto.offset.reset", "earliest");
-
-		// Add Redpanda topic as a Kafka consumer source for textTwo
-		DataStream<String> textTwo = env.addSource(
-						new FlinkKafkaConsumer<>("my_topic", new SimpleStringSchema(), kafkaPropertiesTwo))
+		final DataStream<String> textTwo = env.addSource(
+				new RateControlledSourceFunction(
+						params.getInt("source-rate", 80000),
+						params.getInt("sentence-size", 100)))
 				.name("Source Two")
 				.setParallelism(params.getInt("p2", 1));
 

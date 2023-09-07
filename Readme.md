@@ -74,3 +74,14 @@ docker exec -it jobmanager ./bin/flink run \
   --class io.streamingledger.datastream.BufferingStream \
   jars/spf-0.1.0.jar
 ```
+
+### Scheduler.py
+The goal for the scheduler is to 
+1. read the Flink metrics and collect useful information 
+2. recompute the parallelism based on #1
+3. apply the new parallelism
+
+### Things we need to consider to adapt to the new env
+1. the way how we collect the data, especially we need a more accurate measurement of input rate for the source operator
+2. we need to collect the **processing rate**, **input rate** and **busy time** for each operator 
+3. config specific to the job ex. ops = ['Source:_Source_One', 'Source:_Source_Two', 'FlatMap_tokenizer', 'Count_op', 'Sink:_Dummy_Sink']
