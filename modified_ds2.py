@@ -1,9 +1,10 @@
 # Vertex Class Definition
 class Vertex:
-    def __init__(self, name, processing_rate, parallelism=1):
+    def __init__(self, name, processing_rate, selectivity, parallelism=1):
         self.name = name
         self.processing_rate = processing_rate
         self.parallelism = parallelism
+        self.selectivity = selectivity
         self.adjacent = set()
 
     def add_neighbor(self, vertex):
@@ -58,12 +59,12 @@ class DirectedGraph:
         if not self.source:
             raise ValueError("Source node is not set. Cannot compute output rates.")
         output_rates = {}
-        output_rates[self.source.name] = min(self.input_rate, self.source.parallelism * self.source.processing_rate)
+        output_rates[self.source.name] = self.source.selectivity * min(self.input_rate, self.source.parallelism * self.source.processing_rate)
 
         for vertex in self.topological_sort():
             if vertex != self.source:
                 aggregated_output = sum([output_rates[v.name] for v in self.vertices.values() if vertex in v.get_neighbors()])
-                output_rates[vertex.name] = min(vertex.parallelism * vertex.processing_rate, aggregated_output)
+                output_rates[vertex.name] = vertex.selectivity * min(vertex.parallelism * vertex.processing_rate, aggregated_output)
 
         return output_rates
 
@@ -79,8 +80,8 @@ graph3 = DirectedGraph(3000)
 
 # Example 1
 # Source -> A -> B -> Sink
-A1 = Vertex("A", 500, 2)
-B1 = Vertex("B", 300, 3)
+A1 = Vertex("A", 500, 0.5, 2)
+B1 = Vertex("B", 300, 0.5, 3)
 graph1.add_vertex(A1)
 graph1.add_vertex(B1)
 graph1.set_source(A1)
@@ -105,3 +106,14 @@ graph2.add_edge(A2, B2)
 graph2.add_edge(A2, C2)
 graph2.add_edge(C2, B2)
 
+output_rates1 = graph1.compute_output_rates()
+sink_input_rate1 = graph1.get_sink_input_rate(output_rates1)
+
+output_rates2 = graph2.compute_output_rates()
+sink_input_rate2 = graph2.get_sink_input_rate(output_rates2)
+
+# output_rates3 = graph3.compute_output_rates()
+# sink_input_rate3 = graph3.get_sink_input_rate(output_rates3)
+
+print("Example 1 sink input rate:", sink_input_rate1)
+print("Example 2 sink input rate:", sink_input_rate2)
